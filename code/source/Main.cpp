@@ -10,14 +10,9 @@
 #include "../header/Util.h"
 
 #define TEXT_RESET "\33[0m"
-#define TEXT_WHITE "\33[47m"
-#define TEXT_WHITE_BOLD "\33[1;47m"
-#define TEXT_RED "\033[1;31m"
-#define TEXT_RED_BOLD "\033[31m"
 #define TEXT_YELLOW "\033[33m"
 #define TEXT_YELLOW_BOLD "\033[1;33m"
 #define TEXT_BLUE "\033[34m"
-#define TEXT_BLUE_BOLD "\033[1;34m"
 
 #define CENTRAL_PROCESS 0
 
@@ -45,10 +40,13 @@ size_t knn_row(Matrix *mTest, Matrix *mTrain, size_t qntAttr, size_t row) {
 
 }
 
+
 int main(int argc, char *argv[]) {
 
     clock_t begin = clock();
-    size_t qntAttr = 59;
+
+    string base = argv[1];
+    auto qntAttr = stoi(base);
 
     int id, size;
 
@@ -57,47 +55,69 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_YELLOW << "Initialized." << endl;
-
     cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_YELLOW << "Loading files." << endl;
-    Matrix *mTest = nullptr, *mTrain = parseFileToMatrix("/home/hugovs/CLionProjects/KnnMPI/input/train_59.data", TRAIN_ROW_COUNT, qntAttr);
-    cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_YELLOW << "Train file loaded." << endl;
+
+    // Carrega o arquivo de treino para uma matriz
+    Matrix *mTrain = parseFileToMatrix("/home/hugovs/CLionProjects/KnnMPI/bases/train_" + base + ".data", TRAIN_ROW_COUNT, qntAttr);
+    Matrix *mTest = nullptr;
+
+    cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_YELLOW << "Train matrix created." << endl;
 
     T *sendv;
-    auto *recv = new T[TEST_ROW_COUNT / size];
+    auto *recv = new T[DIVIDED_SIZE(size, qntAttr)];
 
+    // Se é o processo principal, arrega o arquivo de teste para a matriz
     if (id == CENTRAL_PROCESS) {
-        mTest = parseFileToMatrix("/home/hugovs/CLionProjects/KnnMPI/input/test_59.data", TEST_ROW_COUNT, qntAttr);
+        mTest = parseFileToMatrix("/home/hugovs/CLionProjects/KnnMPI/bases/test_" + base + ".data", TEST_ROW_COUNT, qntAttr);
         cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_YELLOW << "Test file loaded." << endl;
         sendv = mTest->data;
     }
 
-    cout << static_cast<int>(DIVIDED_SIZE(size, qntAttr));
-    MPI_Scatter(sendv, static_cast<int>(DIVIDED_SIZE(size, qntAttr)), MPI_FLOAT, recv,
-                static_cast<int>(DIVIDED_SIZE(size, qntAttr)), MPI_FLOAT,
+    // Envia o teste para os demais processos
+    MPI_Scatter(sendv, DIVIDED_SIZE(size, qntAttr), MPI_FLOAT, recv,
+                DIVIDED_SIZE(size, qntAttr), MPI_FLOAT,
                 CENTRAL_PROCESS, MPI_COMM_WORLD);
 
-    /*mTest = new Matrix(static_cast<size_t>(TEST_ROW_COUNT / size), qntAttr, recv);
-    cout << mTest->getRowsCount() << " " << mTest->getColumnsCount() << endl;
+    mTest = new Matrix(TEST_ROW_COUNT / size, qntAttr, recv);
 
-    if (id == CENTRAL_PROCESS) mTest->print();*/
+    cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_YELLOW << "Test matrix created." << endl;
 
-
-    /*MPI_Barrier(MPI_COMM_WORLD);
-
-    for (auto i = (size_t) id; i < TEST_ROW_COUNT; i += size) {
-        cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_BLUE << "Running knn_row for row " << i << "."
+    int ret[DIVIDED_SIZE(size, qntAttr) / qntAttr];
+    for (auto i = 0; i < DIVIDED_SIZE(size, qntAttr) / qntAttr; i++) {
+        cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_BLUE << "Running knn_row for row " << i << " ("
+             << id * (DIVIDED_SIZE(size, qntAttr) / qntAttr) + i << ")."
              << endl;
-        size_t calc = knn_row(mTest, mTrain, qntAttr, i);
+        ret[i] = knn_row(mTest, mTrain, qntAttr, i);
     }
+
+    int *gret;
+    if (id == CENTRAL_PROCESS)
+        gret = new int[static_cast<int>(TEST_ROW_COUNT)];
 
     MPI_Barrier(MPI_COMM_WORLD);
 
+    MPI_Gather(ret, DIVIDED_SIZE(size, qntAttr) / qntAttr, MPI_INT,
+               gret, DIVIDED_SIZE(size, qntAttr) / qntAttr, MPI_INT,
+               CENTRAL_PROCESS, MPI_COMM_WORLD);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    if (id == CENTRAL_PROCESS) {
+        for (int i = 0; i < TEST_ROW_COUNT; i++) {
+            cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_RESET;
+            cout << "Result[" << i << "] -> " << mTrain->getRowIdentifier(gret[i]) << endl;
+        }
+    }
+
+    delete mTest, mTrain, gret, recv;
+
     clock_t end = clock();
     auto elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+
     cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_RESET << "Elapsed time: " << elapsed_secs
          << " seconds." << endl;
 
-    cout << TEXT_RESET;*/
+    cout << TEXT_RESET;
 
     MPI_Finalize();
 
