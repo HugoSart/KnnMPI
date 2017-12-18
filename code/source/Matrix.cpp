@@ -13,6 +13,11 @@ Matrix::Matrix(size_t rowCount, size_t columnCount) : rowCount(rowCount), column
     this->rowIdentifier = new string[rowCount];
 }
 
+Matrix::Matrix(size_t rowCount, size_t columnCount, T *data) : rowCount(rowCount), columnCount(columnCount) {
+    this->data = data;
+    this->rowIdentifier = new string[rowCount];
+}
+
 size_t Matrix::getRowsCount() {
     return this->rowCount;
 }
@@ -52,11 +57,15 @@ void Matrix::setRowIdentifier(size_t rowCount, string str) {
 void Matrix::print() {
 
     for (size_t i = 0; i < rowCount; i++) {
-        cout << this->getRowIdentifier(i) << ": ";
+        cout << i << ": " << this->getRowIdentifier(i) << ": ";
         for (size_t j = 0; j < columnCount; j++) {
             cout << this->get(i, j) << " ";
         }
         cout << endl;
     }
 
+}
+
+size_t Matrix::size() {
+    return getRowsCount() * getColumnsCount();
 }
