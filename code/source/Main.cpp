@@ -20,6 +20,7 @@
 #define TRAIN_ROW_COUNT 6746
 
 #define DIVIDED_SIZE(size, qntAttr) ((TEST_ROW_COUNT / (size)) * (qntAttr))
+#define REST_ROW_COUNT(size, qntAttr) (TEST_ROW_COUNT - (DIVIDED_SIZE(size, qntAttr) / qntAttr) * size)
 
 using namespace std;
 
@@ -41,11 +42,17 @@ size_t knn_row(Matrix *mTest, Matrix *mTrain, size_t qntAttr, size_t row) {
 }
 
 
-int main(int argc, char *argv[]) {
 
+int main(int argc, char *argv[]) {
     clock_t begin = clock();
 
     string base = argv[1];
+
+    if (base != "59" && base != "161" && base != "256" && base != "1380" && base != "1601") {
+        cout << "Invalid argument." << endl;
+        return 0;
+    }
+
     auto qntAttr = stoi(base);
 
     int id, size;
@@ -58,8 +65,9 @@ int main(int argc, char *argv[]) {
     cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_YELLOW << "Loading files." << endl;
 
     // Carrega o arquivo de treino para uma matriz
-    Matrix *mTrain = parseFileToMatrix("/home/hugovs/CLionProjects/KnnMPI/bases/train_" + base + ".data", TRAIN_ROW_COUNT, qntAttr);
-    Matrix *mTest = nullptr;
+    Matrix *mTrain = parseFileToMatrix("bases/train_" + base + ".data",
+                                       TRAIN_ROW_COUNT, qntAttr);
+    Matrix *mTest = nullptr, *mTestMain = nullptr;
 
     cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_YELLOW << "Train matrix created." << endl;
 
@@ -68,7 +76,8 @@ int main(int argc, char *argv[]) {
 
     // Se é o processo principal, arrega o arquivo de teste para a matriz
     if (id == CENTRAL_PROCESS) {
-        mTest = parseFileToMatrix("/home/hugovs/CLionProjects/KnnMPI/bases/test_" + base + ".data", TEST_ROW_COUNT, qntAttr);
+        mTestMain = mTest = parseFileToMatrix("bases/test_" + base + ".data",
+                                              TEST_ROW_COUNT, qntAttr);
         cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_YELLOW << "Test file loaded." << endl;
         sendv = mTest->data;
     }
@@ -92,7 +101,7 @@ int main(int argc, char *argv[]) {
 
     int *gret;
     if (id == CENTRAL_PROCESS)
-        gret = new int[static_cast<int>(TEST_ROW_COUNT)];
+        gret = new int[TEST_ROW_COUNT];
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -102,6 +111,13 @@ int main(int argc, char *argv[]) {
 
     MPI_Barrier(MPI_COMM_WORLD);
 
+    // Calcula o que sobrou
+    if (id == CENTRAL_PROCESS)
+        for (int i = TEST_ROW_COUNT - REST_ROW_COUNT(size, qntAttr) - 1; i < TEST_ROW_COUNT; i++) {
+            cout << "i: " << i << endl;
+            gret[i] = knn_row(mTestMain, mTrain, qntAttr, i);
+        }
+
     if (id == CENTRAL_PROCESS) {
         for (int i = 0; i < TEST_ROW_COUNT; i++) {
             cout << TEXT_YELLOW_BOLD << "Process " << id << " > " << TEXT_RESET;
@@ -109,7 +125,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    delete mTest, mTrain, gret, recv;
+    delete mTest, mTestMain, mTrain, gret, recv;
 
     clock_t end = clock();
     auto elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;

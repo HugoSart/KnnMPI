@@ -24,10 +24,24 @@ Matrix *parseFileToMatrix(string path, const size_t rowCount, const size_t qnt_a
 
     auto *matrix = new Matrix(rowCount, qnt_attr);
 
-    for (size_t i = 0; i < rowCount; i++)
-        for (size_t j = 0; j <= qnt_attr; j++)
-            if (j == qnt_attr) matrix->setRowIdentifier(i, readNext(&file));
-            else matrix->set(i, j, stof(readNext(&file)));
+    for (size_t i = 0; i < rowCount; i++) {
+        for (size_t j = 0; j <= qnt_attr; j++) {
+            string str = readNext(&file);
+            //cout << i << "," << j << " read: " << str;
+            if (j == qnt_attr) matrix->setRowIdentifier(i, str);
+            else {
+                try {
+                    matrix->set(i, j, stof(str));
+                } catch (invalid_argument e) {
+                    //cout << "<- here";
+                    cout << "Parsing error in " + path + " at line " << i << endl;
+                    exit(0);
+                }
+            }
+            //cout << endl;
+        }
+        //cout << endl;
+    }
 
     file.close();
 
